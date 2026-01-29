@@ -428,31 +428,23 @@ resetBtn.addEventListener('click', ()=>{
   refreshInfo();
 });
 async function loadMacro(){
-  try {
-    const fx = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=CNY');
-    const fxj = await fx.json();
-    const usdCny = fxj && fxj.rates && fxj.rates.CNY ? fxj.rates.CNY : null;
-    usdcnyVal.textContent = usdCny ? usdCny.toFixed(4) : '--';
-  } catch(e) { usdcnyVal.textContent = '--'; }
-  try {
-    const cpi = await fetch('https://api.worldbank.org/v2/country/CN/indicator/FP.CPI.TOTL.ZG?format=json');
-    const cj = await cpi.json();
-    let val = '--';
-    if(Array.isArray(cj) && cj[1] && cj[1].length){
-      for(let i=0;i<cj[1].length;i++){ const it = cj[1][i]; if(it.value !== null){ val = parseFloat(it.value).toFixed(2)+'%'; break; } }
-    }
-    cpiVal.textContent = val;
-  } catch(e) { cpiVal.textContent = '--'; }
-  try {
-    const un = await fetch('https://api.worldbank.org/v2/country/CN/indicator/SL.UEM.TOTL.ZS?format=json');
-    const uj = await un.json();
-    let val = '--';
-    if(Array.isArray(uj) && uj[1] && uj[1].length){
-      for(let i=0;i<uj[1].length;i++){ const it = uj[1][i]; if(it.value !== null){ val = parseFloat(it.value).toFixed(2)+'%'; break; } }
-    }
-    unempVal.textContent = val;
-  } catch(e) { unempVal.textContent = '--'; }
-  rateVal.textContent = 'LPR(示例) 3.45%';
+  // 使用模拟数据代替真实API，避免移动端网络请求超时或被拦截
+  // 这也符合"宏观忽悠局"的设定：数据全靠编
+  
+  // 模拟 LPR
+  rateVal.textContent = '3.45%';
+  
+  // 模拟 CPI (-0.5% ~ 2.5%)
+  const cpi = (Math.random() * 3 - 0.5).toFixed(2);
+  cpiVal.textContent = cpi + '%';
+  
+  // 模拟 失业率 (4.8% ~ 5.8%)
+  const unemp = (4.8 + Math.random()).toFixed(2);
+  unempVal.textContent = unemp + '%';
+  
+  // 模拟 汇率 (7.1 ~ 7.35)
+  const fx = (7.1 + Math.random() * 0.25).toFixed(4);
+  usdcnyVal.textContent = fx;
 }
 function init(){
   drawPartial();
