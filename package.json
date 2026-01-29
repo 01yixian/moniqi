@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "纯静态股市模拟器，无需构建",
   "scripts": {
-    "build": "echo 'No build required, static files only'"
+    "build": "mkdir -p dist && cp index.html dist/"
   },
   "dependencies": {},
   "devDependencies": {}
