@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>股市曲线阴跌模拟</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #f0f4f8; color: #1f2937; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+.hdr { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; background: #fff; padding: 12px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.hdr h1 { font-size: 20px; margin: 0; font-weight: 700; color: #111827; width: 100%; margin-bottom: 8px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; width: 100%; }
+.btn { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; }
+.btn:active { transform: scale(0.95); }
+.btn:hover { background: #1d4ed8; }
+.btn-red { background: #dc2626; }
+.btn-red:hover { background: #b91c1c; }
+.btn-green { background: #16a34a; }
+.btn-green:hover { background: #15803d; }
+.tip { font-size: 13px; color: #6b7280; display: flex; align-items: center; gap: 4px; }
+.main { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+.canvasBox { position: relative; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; min-height: 400px; }
+#chart { display: block; width: 100%; height: 550px; }
+.overlay { position: absolute; left: 16px; top: 16px; font-size: 13px; background: rgba(255,255,255,0.95); padding: 8px 12px; border-radius: 8px; color: #374151; border: 1px solid #e5e7eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); pointer-events: none; }
+.panel { background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 16px; height: fit-content; }
+.panel h2 { margin: 0 0 12px; font-size: 18px; color: #111827; border-bottom: 2px solid #f3f4f6; padding-bottom: 8px; }
+.metric { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #e5e7eb; }
+.metric:last-child { border-bottom: none; }
+.metric .label { color: #6b7280; font-size: 14px; }
+.metric .value { font-weight: 700; color: #111827; font-size: 15px; }
+.funny-comment { font-size: 12px; color: #9ca3af; font-style: italic; margin-top: 4px; text-align: right; }
+input[type=range] { accent-color: #2563eb; }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .wrap { padding: 12px; }
+  .hdr h1 { font-size: 18px; text-align: center; }
+  .controls { justify-content: center; }
+  .btn { padding: 10px 20px; flex-grow: 1; text-align: center; font-size: 15px; }
+  .main { grid-template-columns: 1fr; }
+  #chart { height: 400px; }
+  .panel { margin-top: 0; }
+  .tip { width: 100%; justify-content: center; margin-top: 8px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <h1>韭菜模拟器：从入门到天台 (点击高位接盘，体验极速归零)</h1>
+    <div class="controls">
+      <button id="play" class="btn btn-green">🚀 梭哈入场</button>
+      <button id="reset" class="btn btn-red">🔄 销户重练</button>
+      <button id="speedSlow" class="btn">🐌 慢牛</button>
+      <button id="speedMid" class="btn">🐎 疯牛</button>
+      <button id="speedFast" class="btn">⚡ 光速</button>
+    </div>
+    <div class="controls" style="margin-top: 8px;">
+      <span class="tip">收割速度：<span id="speedVal">1.0x</span></span>
+      <input id="speed" type="range" min="0.25" max="6" step="0.05" value="1.0" />
+      <span class="tip" style="margin-left: 12px;">多头幻觉(Bias)：<span id="biasVal">0.02</span></span>
+      <input id="upbias" type="range" min="-0.1" max="0.1" step="0.005" value="0.02" />
+      <span id="info" class="tip" style="margin-left: auto; color: #dc2626; font-weight: 600;"></span>
+    </div>
+  </div>
+  <div class="main">
+    <div class="canvasBox">
+      <canvas id="chart"></canvas>
+      <div id="overlay" class="overlay"></div>
+    </div>
+    <div class="panel">
+      <h2>🌏 宏观忽悠局</h2>
+      <div class="metric">
+        <span class="label">基准利率 (LPR)</span>
+        <span id="rateVal" class="value">--</span>
+      </div>
+      <div class="funny-comment" id="rateComment">"降息了，但银行不借你钱"</div>
+
+      <div class="metric">
+        <span class="label">通胀 (CPI YoY)</span>
+        <span id="cpiVal" class="value">--</span>
+      </div>
+      <div class="funny-comment" id="cpiComment">"猪肉涨价不算通胀"</div>
+
+      <div class="metric">
+        <span class="label">失业率 (Unemp)</span>
+        <span id="unempVal" class="value">--</span>
+      </div>
+      <div class="funny-comment" id="unempComment">"灵活就业人数创新高"</div>
+
+      <div class="metric">
+        <span class="label">汇率 (USD/CNY)</span>
+        <span id="usdcnyVal" class="value">--</span>
+      </div>
+      <div class="funny-comment" id="fxComment">"双向波动，甚至单向贬值"</div>
+
+      <div class="metric">
+        <span class="label">生成模型</span>
+        <span id="modelVal" class="value">--</span>
+      </div>
+      <div class="funny-comment" id="modelComment">"玄学算法生成中..."</div>
+    </div>
+  </div>
+</div>
+<script>
+const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? Math.min(window.devicePixelRatio, 2) : 1;
+const SPM = 5;
+const TOT_MIN = 240;
+const N = SPM * TOT_MIN;
+const baseLine = 100;
+const reversion = 0.0045;
+const volBase = 0.9;
+const downDrift = -0.06;
+const downVol = 0.35;
+const downDampen = 0.995;
+const minPrice = 1;
+const canvas = document.getElementById('chart');
+const overlay = document.getElementById('overlay');
+const playBtn = document.getElementById('play');
+const resetBtn = document.getElementById('reset');
+const speedSlowBtn = document.getElementById('speedSlow');
+const speedMidBtn = document.getElementById('speedMid');
+const speedFastBtn = document.getElementById('speedFast');
+const infoEl = document.getElementById('info');
+const speedInput = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+const upbiasInput = document.getElementById('upbias');
+const biasVal = document.getElementById('biasVal');
+const rateVal = document.getElementById('rateVal');
+const cpiVal = document.getElementById('cpiVal');
+const unempVal = document.getElementById('unempVal');
+const usdcnyVal = document.getElementById('usdcnyVal');
+const modelVal = document.getElementById('modelVal');
+let series = new Array(N);
+let volSeries = new Array(N);
+let vwapSeries = new Array(N);
+let idx = 0;
+let price = baseLine;
+let isRunning = false;
+let triggeredIdx = null;
+let downActive = false;
+let downBias = 1;
+let acc = 0;
+series[0] = price;
+volSeries[0] = 0;
+vwapSeries[0] = baseLine;
+let cumPV = 0;
+let cumV = 0.0001;
+const models = ['OU','GBM','Regime','Jump'];
+let model = models[0];
+let regimeDrift = 0.03;
+let regimeVol = 0.8;
+let prevRet = 0;
+
+const panicQuotes = [
+  "主力：老乡别走，再玩一会！",
+  "技术分析：这里有强支撑（指地板）",
+  "专家：此时卖出是不理智的",
+  "股民：为什么我的账户绿得发光？",
+  "利好出尽是利空，利空出尽还是利空",
+  "别人贪婪我恐惧，别人恐惧我加仓（然后被埋）",
+  "天台的风，今天有点喧嚣",
+  "关灯吃面，泪流满面",
+  "补仓！补仓！只要不卖就不算亏！",
+  "价值投资？不，是价格投机！"
+];
+
+function pickModel(){
+  model = models[Math.floor(Math.random()*models.length)];
+  let comment = "";
+  switch(model) {
+    case 'OU': comment = "震荡洗盘：左右挨耳光"; break;
+    case 'GBM': comment = "单边趋势：不买就踏空，买了就站岗"; break;
+    case 'Regime': comment = "风格切换：ICU与KTV无缝衔接"; break;
+    case 'Jump': comment = "跳空暴跌：一字断魂刀"; break;
+  }
+  overlay.textContent = '当前剧本：' + model;
+  modelVal.textContent = model;
+  document.getElementById('modelComment').textContent = `"${comment}"`;
+}
+function rnorm(){
+  const u = Math.random();
+  const v = Math.random();
+  const a = Math.sqrt(-2 * Math.log(u + 1e-9)) * Math.cos(2 * Math.PI * v);
+  return a;
+}
+function sizeCanvas(){
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+}
+function drawPartial(){
+  sizeCanvas();
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const padX = Math.floor(18 * dpr);
+  const padY = Math.floor(18 * dpr);
+  const innerW = W - padX*2;
+  const innerH = H - padY*2;
+  const priceH = Math.floor(innerH * 0.74);
+  const volH = innerH - priceH;
+  let min = Infinity, max = -Infinity;
+  for(let i=0;i<=idx;i++){ const v = series[i]; if(v<min)min=v; if(v>max)max=v; }
+  const range = (max - min) || 1;
+  const sx = innerW / (N - 1);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(padX, padY, innerW, priceH);
+  ctx.fillStyle = '#f5f7fb';
+  ctx.fillRect(padX, padY + priceH, innerW, volH);
+  ctx.strokeStyle = '#e5e9f2';
+  ctx.lineWidth = Math.max(1, 1 * dpr);
+  const hGrids = 4;
+  for(let g=1; g<=hGrids; g++){
+    const y = padY + Math.floor(g * priceH / (hGrids + 1));
+    ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(padX + innerW, y); ctx.stroke();
+  }
+  const tickMinutes = [0,60,120,150,180,240];
+  ctx.strokeStyle = '#e5e9f2';
+  for(let t=0; t<tickMinutes.length; t++){
+    const m = tickMinutes[t];
+    const x = padX + (m * SPM) * sx;
+    ctx.beginPath(); ctx.moveTo(x, padY); ctx.lineTo(x, padY + innerH); ctx.stroke();
+  }
+  ctx.fillStyle = '#4b5563';
+  ctx.font = Math.floor(11 * dpr) + 'px system-ui';
+  const labels = ['9:30','10:30','11:30','13:00','14:00','15:00'];
+  for(let t=0; t<labels.length; t++){
+    const m = tickMinutes[t];
+    const x = padX + (m * SPM) * sx - 14;
+    ctx.fillText(labels[t], x, padY + innerH + Math.floor(14 * dpr));
+  }
+  ctx.lineWidth = Math.max(1.5, 2.0 * dpr);
+  ctx.strokeStyle = '#1f7aff';
+  ctx.beginPath();
+  for(let i=0;i<=idx;i++){
+    const x = padX + i * sx;
+    const y = padY + priceH - ((series[i] - min) / range) * priceH;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = '#ff8c00';
+  ctx.lineWidth = Math.max(1.2, 1.6 * dpr);
+  ctx.beginPath();
+  for(let i=0;i<=idx;i++){
+    const x = padX + i * sx;
+    const y = padY + priceH - ((vwapSeries[i] - min) / range) * priceH;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  const baseY = padY + priceH - ((baseLine - min) / range) * priceH;
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = Math.max(1, 1 * dpr);
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(padX, baseY); ctx.lineTo(padX + innerW, baseY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#b45309';
+  ctx.fillText('0.00%', padX + innerW - Math.floor(40 * dpr), baseY - Math.floor(6 * dpr));
+  if(triggeredIdx !== null){
+    const x = padX + triggeredIdx * sx;
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = Math.max(1, 1.5 * dpr);
+    ctx.beginPath();
+    ctx.moveTo(x, padY);
+    ctx.lineTo(x, padY + innerH);
+    ctx.stroke();
+  }
+  let vmax = 0;
+  for(let i=0;i<=idx;i++){ if(volSeries[i] > vmax) vmax = volSeries[i]; }
+  const vscale = vmax > 0 ? (volH - Math.floor(4 * dpr)) / vmax : 1;
+  for(let i=0;i<=idx;i++){
+    const x = padX + i * sx;
+    const h = volSeries[i] * vscale;
+    ctx.fillStyle = 'rgba(31,122,255,0.35)';
+    ctx.fillRect(x - Math.max(1, 0.9 * dpr), padY + priceH + volH - h, Math.max(2, 1.6 * dpr), h);
+  }
+  const yTicks = 5;
+  ctx.fillStyle = '#6b7280';
+  for(let g=0; g<=yTicks; g++){
+    const y = padY + Math.floor(g * priceH / yTicks);
+    const val = max - (g * (max-min) / yTicks);
+    const pct = ((val - baseLine) / baseLine) * 100;
+    const txt = val.toFixed(2) + '  (' + (pct>=0?'+':'') + pct.toFixed(2) + '%)';
+    ctx.fillText(txt, padX + innerW - Math.floor(140 * dpr), y - Math.floor(2 * dpr));
+  }
+}
+function stepOnce(){
+  if(idx >= N-1){ isRunning = false; return; }
+  const upBias = parseFloat(upbiasInput.value);
+  const minIdxNext = Math.floor((idx+1) / SPM);
+  const isLunch = (minIdxNext >= 120 && minIdxNext < 150);
+  if(downActive){
+    const eps = rnorm() * downVol;
+    downBias *= downDampen;
+    const drift = downDrift * downBias;
+    price = price + drift + (isLunch ? 0.02 * eps : eps);
+  } else {
+    let eps = rnorm();
+    if(model === 'OU'){
+      const noise = eps * (volBase + 0.3 * Math.abs(prevRet));
+      const mrv = reversion * (baseLine - price);
+      price = price + mrv + upBias + (isLunch ? 0.2 * noise : noise);
+    } else if(model === 'GBM'){
+      const sigma = 0.015 + 0.02 * Math.abs(prevRet);
+      const mu = upBias / Math.max(1, baseLine);
+      const dt = 1/ (SPM*TOT_MIN);
+      const ret = (mu - 0.5 * sigma * sigma) * dt + sigma * Math.sqrt(dt) * eps;
+      price = price * (1 + ret);
+    } else if(model === 'Regime'){
+      if(Math.random() < 0.02){
+        regimeDrift = (Math.random() < 0.5 ? 0.06 : -0.03);
+        regimeVol = 0.6 + Math.random()*0.8;
+      }
+      const noise = eps * regimeVol;
+      price = price + regimeDrift + upBias + (isLunch ? 0.2 * noise : noise);
+    } else if(model === 'Jump'){
+      const noise = eps * (volBase + 0.2 * Math.abs(prevRet));
+      const mrv = reversion * (baseLine - price);
+      const jumpProb = 0.01;
+      let jump = 0;
+      if(Math.random() < jumpProb){
+        jump = (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random()*1.4);
+      }
+      price = price + mrv + upBias + (isLunch ? 0.2 * noise : noise) + jump;
+    }
+  }
+  if(price < minPrice) price = minPrice;
+  const prevP = series[idx] || baseLine;
+  prevRet = price - prevP;
+  series[idx+1] = price;
+  let baseVol = 1 + 4 * Math.exp(-minIdxNext / 15);
+  const volNoise = Math.abs(rnorm());
+  let v = baseVol * (0.6 + 0.8 * volNoise);
+  if(isLunch) v *= 0.1;
+  if(downActive) v *= 0.7;
+  volSeries[idx+1] = v;
+  cumPV += price * v;
+  cumV += v;
+  const vwapRaw = cumPV / Math.max(0.0001, cumV);
+  const alpha = 0.06;
+  vwapSeries[idx+1] = alpha * vwapRaw + (1 - alpha) * vwapSeries[idx];
+  idx++;
+}
+function loop(){
+  if(!isRunning) return;
+  const speed = parseFloat(speedInput.value);
+  acc += speed;
+  let guard = 0;
+  while(acc >= 1 && guard < 100){
+    stepOnce();
+    acc -= 1;
+    guard++;
+  }
+  drawPartial();
+  requestAnimationFrame(loop);
+}
+function refreshInfo(){
+  const speed = parseFloat(speedInput.value).toFixed(1);
+  const bias = parseFloat(upbiasInput.value).toFixed(3);
+  speedVal.textContent = speed + 'x';
+  biasVal.textContent = bias;
+  
+  if(triggeredIdx === null){
+    infoEl.textContent = '💡 提示：趁现在还是红的，点一下K线高位接盘！';
+    infoEl.style.color = '#10b981'; // Green
+    if(!isRunning) overlay.textContent = '准备好入场了吗？';
+  } else {
+    // Randomly pick a quote occasionally or just keep static status
+    // For smoother UI, we won't change text every frame, just show status
+    const lostPct = ((price - series[triggeredIdx])/series[triggeredIdx] * 100).toFixed(2);
+    infoEl.textContent = `📉 已被套牢：从索引 ${triggeredIdx} 开始，浮亏 ${lostPct}%`;
+    infoEl.style.color = '#ef4444'; // Red
+  }
+  
+  playBtn.textContent = isRunning ? '⏸ 暂停交易' : '🚀 梭哈入场';
+}
+
+canvas.addEventListener('click', ()=>{
+  if(triggeredIdx !== null) return; // Don't trigger twice
+  triggeredIdx = idx;
+  downActive = true;
+  downBias = 1;
+  
+  // Show a random panic quote on overlay
+  const quote = panicQuotes[Math.floor(Math.random() * panicQuotes.length)];
+  overlay.textContent = `😱 ${quote}`;
+  overlay.style.backgroundColor = 'rgba(254, 226, 226, 0.95)'; // Light red bg
+  overlay.style.color = '#b91c1c';
+  
+  refreshInfo();
+});
+
+playBtn.addEventListener('click', ()=>{
+  isRunning = !isRunning;
+  if(isRunning) requestAnimationFrame(loop);
+  refreshInfo();
+});
+
+speedSlowBtn.addEventListener('click', ()=>{ speedInput.value = '0.75'; refreshInfo(); });
+speedMidBtn.addEventListener('click', ()=>{ speedInput.value = '1.0'; refreshInfo(); });
+speedFastBtn.addEventListener('click', ()=>{ speedInput.value = '2.0'; refreshInfo(); });
+
+resetBtn.addEventListener('click', ()=>{
+  isRunning = false;
+  triggeredIdx = null;
+  downActive = false;
+  downBias = 1;
+  idx = 0;
+  price = baseLine;
+  series = new Array(N);
+  series[0] = price;
+  volSeries = new Array(N);
+  volSeries[0] = 0;
+  vwapSeries = new Array(N);
+  vwapSeries[0] = baseLine;
+  cumPV = 0; cumV = 0.0001; prevRet = 0;
+  
+  pickModel(); // New model
+  acc = 0;
+  
+  // Reset Overlay Style
+  overlay.style.backgroundColor = 'rgba(255,255,255,0.95)';
+  overlay.style.color = '#374151';
+  
+  drawPartial();
+  refreshInfo();
+});
+async function loadMacro(){
+  try {
+    const fx = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=CNY');
+    const fxj = await fx.json();
+    const usdCny = fxj && fxj.rates && fxj.rates.CNY ? fxj.rates.CNY : null;
+    usdcnyVal.textContent = usdCny ? usdCny.toFixed(4) : '--';
+  } catch(e) { usdcnyVal.textContent = '--'; }
+  try {
+    const cpi = await fetch('https://api.worldbank.org/v2/country/CN/indicator/FP.CPI.TOTL.ZG?format=json');
+    const cj = await cpi.json();
+    let val = '--';
+    if(Array.isArray(cj) && cj[1] && cj[1].length){
+      for(let i=0;i<cj[1].length;i++){ const it = cj[1][i]; if(it.value !== null){ val = parseFloat(it.value).toFixed(2)+'%'; break; } }
+    }
+    cpiVal.textContent = val;
+  } catch(e) { cpiVal.textContent = '--'; }
+  try {
+    const un = await fetch('https://api.worldbank.org/v2/country/CN/indicator/SL.UEM.TOTL.ZS?format=json');
+    const uj = await un.json();
+    let val = '--';
+    if(Array.isArray(uj) && uj[1] && uj[1].length){
+      for(let i=0;i<uj[1].length;i++){ const it = uj[1][i]; if(it.value !== null){ val = parseFloat(it.value).toFixed(2)+'%'; break; } }
+    }
+    unempVal.textContent = val;
+  } catch(e) { unempVal.textContent = '--'; }
+  rateVal.textContent = 'LPR(示例) 3.45%';
+}
+function init(){
+  drawPartial();
+  pickModel();
+  refreshInfo();
+  loadMacro();
+}
+window.addEventListener('resize', ()=>{ drawPartial(); });
+speedInput.addEventListener('input', refreshInfo);
+upbiasInput.addEventListener('input', refreshInfo);
+init();
+</script>
+</body>
+</html>
