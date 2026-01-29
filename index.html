@@ -472,10 +472,24 @@ if ('serviceWorker' in navigator) {
 let deferredPrompt;
 const installBtn = document.getElementById('installBtn');
 
+// Debug info
+console.log('🚀 PWA 初始化中...');
+
 window.addEventListener('beforeinstallprompt', (e) => {
+  console.log('✅ 捕捉到安装事件！应用可以被安装了。');
   e.preventDefault();
   deferredPrompt = e;
   installBtn.style.display = 'block';
+  
+  // 增加一个小动画吸引注意
+  installBtn.animate([
+    { transform: 'scale(1)' },
+    { transform: 'scale(1.1)' },
+    { transform: 'scale(1)' }
+  ], {
+    duration: 500,
+    iterations: 3
+  });
 });
 
 installBtn.addEventListener('click', async () => {
@@ -483,13 +497,13 @@ installBtn.addEventListener('click', async () => {
   installBtn.style.display = 'none';
   deferredPrompt.prompt();
   const { outcome } = await deferredPrompt.userChoice;
-  console.log(`User response to the install prompt: ${outcome}`);
+  console.log(`用户安装选择: ${outcome}`);
   deferredPrompt = null;
 });
 
 window.addEventListener('appinstalled', () => {
   installBtn.style.display = 'none';
-  console.log('PWA was installed');
+  console.log('🎉 PWA 已成功安装！');
 });
 </script>
 </body>
